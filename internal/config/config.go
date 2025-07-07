@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -16,6 +17,9 @@ type Config struct {
 	S3_PREFIX             string
 	LOCAL_DIR             string
 	DB_PATH               string
+	MAX_WORKERS           int
+	BATCH_SIZE            int
+	RATE_LIMIT_PER_SEC    int
 }
 
 // Load loads the configuration from a .env file or uses hardcoded defaults
@@ -33,6 +37,9 @@ func Load() *Config {
 		S3_PREFIX:             getEnv("S3_PREFIX", "your-s3-prefix/"),
 		LOCAL_DIR:             getEnv("LOCAL_DIR", "./data"),
 		DB_PATH:               getEnv("DB_PATH", "./s3_sync_status.parquet"),
+		MAX_WORKERS:           getEnvInt("MAX_WORKERS", 50),
+		BATCH_SIZE:            getEnvInt("BATCH_SIZE", 100),
+		RATE_LIMIT_PER_SEC:    getEnvInt("RATE_LIMIT_PER_SEC", 100),
 	}
 }
 
@@ -40,6 +47,16 @@ func Load() *Config {
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
+	}
+	return defaultValue
+}
+
+// getEnvInt retrieves an environment variable as integer or returns a default value
+func getEnvInt(key string, defaultValue int) int {
+	if value, exists := os.LookupEnv(key); exists {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
 	}
 	return defaultValue
 }

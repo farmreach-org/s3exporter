@@ -1,4 +1,4 @@
 data
 .env
 s3_sync_status.parquet
-sava-s3-export-macos
+/sava-s3-export*

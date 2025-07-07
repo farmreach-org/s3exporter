@@ -25,12 +25,18 @@ type FileRecord struct {
 
 // ParquetDB handles operations on the Parquet database file
 type ParquetDB struct {
-	path string
+	path        string
+	batchBuffer []FileRecord
+	batchSize   int
 }
 
 // NewParquetDB creates a new ParquetDB instance
-func NewParquetDB(path string) (*ParquetDB, error) {
-	db := &ParquetDB{path: path}
+func NewParquetDB(path string, batchSize int) (*ParquetDB, error) {
+	db := &ParquetDB{
+		path:        path,
+		batchBuffer: make([]FileRecord, 0, batchSize),
+		batchSize:   batchSize,
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		log.Println("No database file found, creating a new one...")
 		if err := db.createEmptyFile(); err != nil {
@@ -145,4 +151,54 @@ func (db *ParquetDB) UpdateSyncStatus(s3Key, etag, localPath, status string, las
 	}
 
 	return db.WriteRecords(recordSlice)
+}
+
+// BatchUpdate adds a record to the batch buffer
+func (db *ParquetDB) BatchUpdate(s3Key, etag, localPath, status string, lastModified time.Time) error {
+	record := FileRecord{
+		S3Key:        s3Key,
+		ETag:         etag,
+		LocalPath:    localPath,
+		SyncStatus:   status,
+		LastModified: lastModified.Unix(),
+		LastSyncedAt: time.Now().Unix(),
+	}
+	
+	db.batchBuffer = append(db.batchBuffer, record)
+	
+	if len(db.batchBuffer) >= db.batchSize {
+		return db.FlushBatch()
+	}
+	
+	return nil
+}
+
+// FlushBatch writes all buffered records to the database
+func (db *ParquetDB) FlushBatch() error {
+	if len(db.batchBuffer) == 0 {
+		return nil
+	}
+	
+	existingRecords, err := db.ReadAllRecords(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to read existing records: %w", err)
+	}
+	
+	for _, record := range db.batchBuffer {
+		existingRecords[record.S3Key] = record
+	}
+	
+	var recordSlice []FileRecord
+	for _, r := range existingRecords {
+		recordSlice = append(recordSlice, r)
+	}
+	
+	if err := db.WriteRecords(recordSlice); err != nil {
+		return fmt.Errorf("failed to write batch: %w", err)
+	}
+	
+	log.Printf("Flushed batch of %d records to database", len(db.batchBuffer))
+	db.batchBuffer = db.batchBuffer[:0]
+	
+	return nil
 }
