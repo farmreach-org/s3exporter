@@ -1,4 +1,4 @@
-# S3 Sava Export
+# S3 Export
 
 This application syncs files from an AWS S3 prefix to a local directory. It uses a local Parquet file to keep track of the sync status of each file.
 
